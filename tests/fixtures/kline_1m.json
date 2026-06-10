@@ -1,0 +1,28 @@
+{
+  "comment": "Recorded Binance combined-stream @kline_1m event for 1000PEPEUSDT. Used to lock symbol normalization and kline→Candle conversion.",
+  "stream": "1000pepeusdt@kline_1m",
+  "data": {
+    "e": "kline",
+    "E": 1718030460123,
+    "s": "1000PEPEUSDT",
+    "k": {
+      "t": 1718030400000,
+      "T": 1718030459999,
+      "s": "1000PEPEUSDT",
+      "i": "1m",
+      "f": 100000,
+      "L": 100120,
+      "o": "0.0128400",
+      "c": "0.0129100",
+      "h": "0.0129600",
+      "l": "0.0128200",
+      "v": "184320000",
+      "n": 121,
+      "x": true,
+      "q": "2378940.55",
+      "V": "92160000",
+      "Q": "1189470.27",
+      "B": "0"
+    }
+  }
+}
