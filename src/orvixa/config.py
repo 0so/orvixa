@@ -15,6 +15,13 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 _VALID_FEEDS = ("sim", "binance")
 
 
+def _split_csv_raw(value: object) -> object:
+    """Turn ``"a, b"`` into ``["a", "b"]`` without case-folding (e.g. URLs)."""
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return value
+
+
 def _split_csv(value: object) -> object:
     """Turn ``"BTCUSDT, ethusdt"`` into ``["BTCUSDT", "ETHUSDT"]``.
 
@@ -108,13 +115,42 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # --- web/API (Phase 2) ----------------------------------------------
-    # Shared API key required in the X-API-Key header. Empty disables auth
-    # (local dev only). Set API_KEY in .env for any exposed deployment.
+    # Deployment mode. "production" (the default) enforces a real API_KEY and
+    # forbids wildcard CORS. Set to "development" for local work only.
+    app_env: str = "production"
+    # Shared API key required in the X-API-Key header. Must be set to a
+    # non-default value in production; see Settings.check_security below.
     api_key: str = ""
+    # Comma-separated list of allowed CORS origins for the API.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://localhost:8080"]
+    )
     # Max signal rows returned by GET /signals/{symbol}.
     api_signals_limit: int = 50
     # Daemon supervisor restart/poll interval (seconds) for the looped runners.
     daemon_interval_seconds: float = 5.0
+
+    _split_cors_origins = field_validator("cors_origins", mode="before")(_split_csv_raw)
+
+    @field_validator("cors_origins", mode="after")
+    @classmethod
+    def _validate_cors_origins(cls, value: list[str], info) -> list[str]:
+        app_env = (info.data.get("app_env") or "production").lower()
+        if app_env == "production" and "*" in value:
+            raise RuntimeError(
+                "SECURITY ERROR: wildcard CORS origin '*' is not allowed in production"
+            )
+        return value
+
+    @field_validator("api_key", mode="after")
+    @classmethod
+    def _validate_api_key(cls, value: str, info) -> str:
+        app_env = (info.data.get("app_env") or "production").lower()
+        if app_env == "production" and (not value or value == "orvixa-dev-key"):
+            raise RuntimeError(
+                "SECURITY ERROR: default or missing API_KEY is not allowed in production"
+            )
+        return value
 
     # --- persistence (M2) -------------------------------------------------
     postgres_dsn: str = "postgresql://orvixa:orvixa@postgres:5432/orvixa"

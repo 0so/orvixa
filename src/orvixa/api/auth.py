@@ -16,8 +16,10 @@ from ..config import Settings
 def require_api_key(settings: Settings):
     """Build a FastAPI dependency that enforces the configured ``X-API-Key``.
 
-    If no key is configured (empty string) auth is disabled — convenient for
-    local ``FEED=sim`` development, explicit in production via ``.env``.
+    ``Settings`` validation already guarantees that, in production, ``api_key``
+    is non-empty and not the checked-in default — so an empty key here only
+    occurs in explicit ``app_env=development`` setups, where auth is disabled
+    for local convenience.
     """
 
     async def _check(x_api_key: str | None = Header(default=None)) -> None:

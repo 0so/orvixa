@@ -55,10 +55,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # The static frontend is served from a different origin in dev (or the same
-    # one in compose); permissive CORS is fine for a read-only, API-keyed surface.
+    # one in compose). Allowed origins are explicit and configurable via
+    # CORS_ORIGINS; ``Settings`` forbids "*" in production.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.cors_origins,
         allow_methods=["GET"],
         allow_headers=["*"],
     )

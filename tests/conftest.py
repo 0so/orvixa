@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
+
+# The Phase 2 API module builds a module-level `app = create_app()` on import
+# (required for `uvicorn orvixa.api.app:app`), which now fails fast unless
+# APP_ENV=development or a valid API_KEY is configured. Default to dev mode
+# for the test session; individual tests construct their own Settings.
+os.environ.setdefault("APP_ENV", "development")
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
