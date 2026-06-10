@@ -152,6 +152,17 @@ class Settings(BaseSettings):
             )
         return value
 
+    @field_validator("postgres_dsn", "redis_url", mode="after")
+    @classmethod
+    def _validate_no_default_credentials(cls, value: str, info) -> str:
+        app_env = (info.data.get("app_env") or "production").lower()
+        if app_env == "production" and "orvixa:orvixa" in value:
+            raise RuntimeError(
+                "SECURITY ERROR: default 'orvixa:orvixa' credentials are not allowed in production "
+                "(set POSTGRES_DSN / REDIS_URL to a non-default DSN)"
+            )
+        return value
+
     # --- persistence (M2) -------------------------------------------------
     postgres_dsn: str = "postgresql://orvixa:orvixa@postgres:5432/orvixa"
     redis_url: str = "redis://redis:6379/0"

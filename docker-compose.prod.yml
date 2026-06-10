@@ -1,0 +1,114 @@
+name: orvixa-prod
+
+# Shared build/env anchor for every Python service (one image, many commands).
+# Unlike docker-compose.dev.yml, this does NOT bind-mount source code: the
+# image built from Dockerfile.dev is treated as an immutable artifact.
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  env_file: .env
+  volumes:
+    - ./data:/app/data
+  logging: &logging
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    # Not published to the host: only reachable from other containers on
+    # this compose network. Use an SSH tunnel for ad-hoc admin access.
+    expose:
+      - "5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    logging: *logging
+
+  # One-shot: bring the schema to head (Alembic 0002). Every other Python
+  # service waits for this to complete so migrations run exactly once.
+  migrate:
+    <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
+  # Persistent ingestion daemon (feed -> candles), looped via the supervisor.
+  ingest:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: python -m orvixa.runners.daemon ingest
+    restart: unless-stopped
+
+  # Persistent analytics daemon (candles -> indicators/signals/events/regime).
+  analytics:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: python -m orvixa.runners.daemon analytics
+    restart: unless-stopped
+
+  # Read-only FastAPI service exposing /symbols /signals /regime /policy.
+  # Bound to localhost only; a reverse proxy (Caddy/Traefik/nginx) in front
+  # of this host should terminate TLS and forward to 127.0.0.1:8000.
+  api:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: uvicorn orvixa.api.app:app --host 0.0.0.0 --port 8000
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    restart: unless-stopped
+
+  # Static SPA dashboard. Bound to localhost only; serve via the same
+  # reverse proxy as `api`.
+  frontend:
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  pgdata:

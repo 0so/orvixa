@@ -36,6 +36,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     setup_logging(settings.log_level)
     log = get_logger("orvixa.api")
 
+    if settings.app_env.lower() != "production":
+        log.warning(
+            "RUNNING IN DEV MODE — auth may be disabled and CORS may be open; "
+            "do not expose this instance publicly",
+            extra={"app_env": settings.app_env},
+        )
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         pool = await create_readonly_pool(settings)
