@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ORVIXA — Analytics Dashboard</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: #0d1117; color: #c9d1d9; font-size: 14px;
+  }
+  header {
+    padding: 16px 20px; border-bottom: 1px solid #21262d;
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; color: #58a6ff; }
+  header label { font-size: 12px; color: #8b949e; }
+  header input {
+    background: #010409; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 4px 8px; border-radius: 6px; font: inherit; font-size: 12px;
+  }
+  #status { margin-left: auto; font-size: 12px; color: #8b949e; }
+  main { padding: 20px; display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 1100px) { main { grid-template-columns: 1fr 1fr; } }
+  .panel { background: #161b22; border: 1px solid #21262d; border-radius: 10px; overflow: hidden; }
+  .panel h2 { margin: 0; padding: 12px 16px; font-size: 13px; background: #1c2128; border-bottom: 1px solid #21262d; text-transform: uppercase; letter-spacing: .5px; color: #8b949e; }
+  .panel .body { padding: 12px 16px; max-height: 360px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .badge.core { background: #1f6feb33; color: #58a6ff; }
+  .badge.alt { background: #8b949e33; color: #c9d1d9; }
+  .badge.meme { background: #db61a233; color: #db61a2; }
+  .regime-badge { font-size: 16px; padding: 6px 14px; }
+  .regime-risk_on, .regime-bullish { background: #2ea04333; color: #3fb950; }
+  .regime-risk_off, .regime-bearish { background: #da363333; color: #f85149; }
+  .regime-neutral, .regime-unknown { background: #8b949e33; color: #c9d1d9; }
+  .symbol-pick { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .symbol-pick button {
+    background: #21262d; border: 1px solid #30363d; color: #c9d1d9;
+    padding: 4px 12px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 12px;
+  }
+  .symbol-pick button.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .muted { color: #8b949e; font-style: italic; }
+  pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ORVIXA</h1>
+  <label>API base <input id="apiBase" value="http://localhost:8000" size="24" /></label>
+  <label>API key <input id="apiKey" type="password" placeholder="X-API-Key" size="18" /></label>
+  <span id="status">initializing…</span>
+</header>
+
+<div style="padding: 0 20px;">
+  <div class="symbol-pick" id="symbolPick"></div>
+</div>
+
+<main>
+  <section class="panel">
+    <h2>Regime state — <span id="regimeSymbol">—</span></h2>
+    <div class="body" id="regimePanel"><span class="muted">loading…</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>Policy decisions — <span id="policySymbol">—</span></h2>
+    <div class="body" id="policyPanel"><span class="muted">loading…</span></div>
+  </section>
+
+  <section class="panel" style="grid-column: 1 / -1;">
+    <h2>Live signals — <span id="signalsSymbol">—</span></h2>
+    <div class="body" id="signalsPanel"><span class="muted">loading…</span></div>
+  </section>
+</main>
+
+<script>
+const POLL_MS = 7000;
+let symbols = [];
+let active = null;
+
+const $ = (id) => document.getElementById(id);
+const base = () => $("apiBase").value.replace(/\/$/, "");
+const headers = () => {
+  const k = $("apiKey").value.trim();
+  return k ? { "X-API-Key": k } : {};
+};
+
+async function api(path) {
+  const res = await fetch(base() + path, { headers: headers() });
+  if (!res.ok) throw new Error(path + " → " + res.status);
+  return res.json();
+}
+
+function setStatus(msg, ok = true) {
+  const el = $("status");
+  el.textContent = msg;
+  el.style.color = ok ? "#3fb950" : "#f85149";
+}
+
+function renderSymbolPicker() {
+  const wrap = $("symbolPick");
+  wrap.innerHTML = "";
+  for (const s of symbols) {
+    const b = document.createElement("button");
+    b.textContent = s.base;
+    if (s.base === active) b.classList.add("active");
+    b.onclick = () => { active = s.base; renderSymbolPicker(); refreshActive(); };
+    wrap.appendChild(b);
+  }
+}
+
+function renderRegime(data) {
+  $("regimeSymbol").textContent = data.symbol;
+  const r = data.regime || {};
+  const el = $("regimePanel");
+  if (!r || Object.keys(r).length === 0) {
+    el.innerHTML = '<span class="muted">no regime snapshot computed yet (empty — expected on a fresh DB)</span>';
+    return;
+  }
+  const regime = (r.regime || "unknown").toString().toLowerCase();
+  el.innerHTML = `
+    <div><span class="badge regime-badge regime-${regime}">${(r.regime || "UNKNOWN").toUpperCase()}</span></div>
+    <table>
+      <tr><th>vol regime</th><td>${r.vol_regime ?? "—"}</td></tr>
+      <tr><th>breadth</th><td>${r.breadth ?? "—"}</td></tr>
+      <tr><th>health score</th><td>${r.health_score ?? "—"}</td></tr>
+      <tr><th>as of</th><td>${r.ts ?? "—"}</td></tr>
+    </table>`;
+}
+
+function renderPolicy(data) {
+  $("policySymbol").textContent = data.symbol;
+  const p = data.policy || {};
+  const el = $("policyPanel");
+  if (!p || Object.keys(p).length === 0) {
+    el.innerHTML = '<span class="muted">no persisted policy decisions — policy is produced offline by the frozen validation harness (empty — expected)</span>';
+    return;
+  }
+  el.innerHTML = "<pre>" + JSON.stringify(p, null, 2) + "</pre>";
+}
+
+function renderSignals(data) {
+  $("signalsSymbol").textContent = data.symbol;
+  const rows = data.signals || [];
+  const el = $("signalsPanel");
+  if (rows.length === 0) {
+    el.innerHTML = '<span class="muted">no signals for this symbol yet (empty — expected for *_REAL on a fresh DB)</span>';
+    return;
+  }
+  let html = "<table><tr><th>ts</th><th>type</th><th>confidence</th><th>from→to</th></tr>";
+  for (const s of rows) {
+    html += `<tr><td>${s.ts}</td><td>${s.type}</td><td>${s.confidence}</td><td>${s.state_from ?? "—"} → ${s.state_to ?? "—"}</td></tr>`;
+  }
+  html += "</table>";
+  el.innerHTML = html;
+}
+
+async function refreshActive() {
+  if (!active) return;
+  try {
+    const [regime, policy, signals] = await Promise.all([
+      api("/regime/" + active),
+      api("/policy/" + active),
+      api("/signals/" + active),
+    ]);
+    renderRegime(regime);
+    renderPolicy(policy);
+    renderSignals(signals);
+    setStatus("updated " + new Date().toLocaleTimeString());
+  } catch (e) {
+    setStatus(String(e.message || e), false);
+  }
+}
+
+async function loadSymbols() {
+  try {
+    symbols = await api("/symbols");
+    if (!active && symbols.length) active = symbols[0].base;
+    renderSymbolPicker();
+    await refreshActive();
+  } catch (e) {
+    setStatus(String(e.message || e), false);
+  }
+}
+
+$("apiKey").value = localStorage.getItem("orvixa_key") || "";
+$("apiBase").value = localStorage.getItem("orvixa_base") || $("apiBase").value;
+$("apiKey").onchange = () => { localStorage.setItem("orvixa_key", $("apiKey").value); loadSymbols(); };
+$("apiBase").onchange = () => { localStorage.setItem("orvixa_base", $("apiBase").value); loadSymbols(); };
+
+loadSymbols();
+setInterval(refreshActive, POLL_MS);
+</script>
+</body>
+</html>
