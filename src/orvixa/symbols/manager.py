@@ -29,10 +29,11 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from ..config import Settings
-from ..db.models import SymbolRow
-from ..db.repository import SymbolRepository
+from ..db.models import SymbolRow, TierChangeRow
+from ..db.repository import SymbolRepository, TierChangeRepository
 from ..feeds.base import MarketFeed, TickerRow
 from ..feeds.normalize import normalize_symbol
 from .breadth import BreadthEngine
@@ -79,9 +80,11 @@ class SymbolManager:
         feed: MarketFeed | None = None,
         market_client: BinanceMarketClient | None = None,
         breadth_engine: BreadthEngine | None = None,
+        tier_change_repo: TierChangeRepository | None = None,
     ) -> None:
         self._settings = settings
         self._symbol_repo = symbol_repo
+        self._tier_change_repo = tier_change_repo
         self._feed = feed
         self._market_client = market_client or BinanceMarketClient(rest_base=settings.binance_rest_base)
         self._breadth = breadth_engine or BreadthEngine(trend_window=settings.breadth_trend_window)
@@ -210,6 +213,8 @@ class SymbolManager:
 
             for state in self._states.values():
                 await self._persist(state)
+
+            await self._persist_tier_changes(changes)
 
             self.refresh_count += 1
             self.last_tier_changes = changes
@@ -370,6 +375,28 @@ class SymbolManager:
                 "count": state.count,
             },
         )
+
+    async def _persist_tier_changes(self, changes: list[TierChange]) -> None:
+        """Log every tier transition with a reliable timestamp (M3 30-day evaluation)."""
+        if self._tier_change_repo is None or not changes:
+            return
+        ts = datetime.now(tz=UTC)
+        for change in changes:
+            symbol_id = await self._symbol_repo.get_id(change.base)
+            if symbol_id is None:
+                logger.warning(
+                    "tier change for unresolved symbol; not persisted", extra={"base": change.base}
+                )
+                continue
+            await self._tier_change_repo.insert(
+                TierChangeRow(
+                    symbol_id=symbol_id,
+                    ts=ts,
+                    from_tier=change.from_tier,
+                    to_tier=change.to_tier,
+                    reason=change.reason,
+                )
+            )
 
     # -- feed integration -------------------------------------------------------
     async def _sync_feed(self) -> None:

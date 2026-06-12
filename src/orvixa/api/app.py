@@ -2,19 +2,17 @@
 
 Endpoints (all read-only, all backed directly by the existing repositories):
 
-* ``GET /symbols``          — every registered symbol from the ``symbols`` registry.
-* ``GET /signals/{symbol}`` — recent rows from the ``signals`` log for one symbol.
-* ``GET /regime/{symbol}``  — latest market-wide regime snapshot (``market_memory``).
-* ``GET /policy/{symbol}``  — policy decisions for one symbol (none are persisted
-  in the frozen schema, so this returns ``{}`` — see note below).
-* ``GET /health``           — unauthenticated liveness probe.
+* ``GET /symbols``         — every registered symbol from the ``symbols`` registry.
+* ``GET /regime/{symbol}`` — latest market-wide regime snapshot (``market_memory``).
+* ``GET /health``          — unauthenticated liveness probe.
 
-The policy layer (:mod:`orvixa.backtest.policy_validation`) is a pure,
-offline dict-to-dict transform over the validation harness output; it writes
-nothing to the database. There is therefore no per-symbol policy table to
-read, and ``/policy/{symbol}`` returns an empty object by design. This keeps
-the API a faithful, read-only mirror of what the pipeline actually persists
-without inventing data or touching core logic.
+30-day Market Intelligence evaluation (frozen 2026-06-12): the BUY/SELL/
+HIGHVOL signal engine and the (always-empty) policy endpoint are not part of
+the visible/active product surface during this window, so ``/signals/{symbol}``
+and ``/policy/{symbol}`` have been removed from the API. The ``signals`` table
+and repository still exist in the schema/codebase; only the API surface and
+the analytics engine's signal evaluation (gated by ``Settings.enable_signals``)
+are disabled.
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from ..config import Settings, get_settings
-from ..db import MarketMemoryRepository, SignalRepository, SymbolRepository
+from ..db import MarketMemoryRepository, SymbolRepository
 from ..logging import get_logger, setup_logging
 from .auth import require_api_key
 from .deps import create_readonly_pool, record_to_dict, records_to_list
@@ -47,7 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         pool = await create_readonly_pool(settings)
         app.state.pool = pool
-        log.info("api started", extra={"signals_limit": settings.api_signals_limit})
+        log.info("api started")
         try:
             yield
         finally:
@@ -89,14 +87,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         repo = SymbolRepository(app.state.pool)
         return records_to_list(await repo.list_all())
 
-    @app.get("/signals/{symbol}", tags=["data"], dependencies=[Depends(auth)])
-    async def get_signals(symbol: str) -> dict:
-        pool = app.state.pool
-        symbol_id = await _symbol_id_or_404(pool, symbol)
-        repo = SignalRepository(pool)
-        rows = await repo.get_recent(symbol_id=symbol_id, limit=settings.api_signals_limit)
-        return {"symbol": symbol, "signals": records_to_list(rows)}
-
     @app.get("/regime/{symbol}", tags=["data"], dependencies=[Depends(auth)])
     async def get_regime(symbol: str) -> dict:
         pool = app.state.pool
@@ -108,13 +98,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         rows = await repo.get_recent(limit=1)
         latest = record_to_dict(rows[0]) if rows else None
         return {"symbol": symbol, "regime": latest or {}}
-
-    @app.get("/policy/{symbol}", tags=["data"], dependencies=[Depends(auth)])
-    async def get_policy(symbol: str) -> dict:
-        # Policy decisions are produced offline by the (frozen) validation
-        # harness and are not persisted, so there is nothing to read here.
-        await _symbol_id_or_404(app.state.pool, symbol)
-        return {"symbol": symbol, "policy": {}}
 
     return app
 

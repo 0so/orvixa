@@ -75,6 +75,23 @@ ALERT_STATUSES = ("sent", "throttled", "fail")
 
 
 @dataclass(slots=True)
+class TierChangeRow:
+    """One persisted tier/class transition from the Symbol Manager (M3).
+
+    Mirrors :class:`orvixa.symbols.models.TierChange`, resolved to a
+    ``symbols.id`` and timestamped at persistence time. This is the raw
+    history the 30-day Market Intelligence evaluation's tiering component
+    (the dominant signal in the decision matrix) is classified against.
+    """
+
+    symbol_id: int
+    ts: datetime
+    from_tier: int
+    to_tier: int
+    reason: str  # "ranking" | "spike" | "demote_spike" | "delisted" | "relisted"
+
+
+@dataclass(slots=True)
 class SignalRow:
     symbol_id: int
     ts: datetime

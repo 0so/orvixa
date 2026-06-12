@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     high_volatility_pct: float = 3.0
     # Minimum confidence (0-100) for a signal to be persisted.
     signal_min_confidence: int = 60
+    # 30-day Market Intelligence evaluation (frozen 2026-06-12): the BUY/SELL/
+    # HIGHVOL signal engine is not part of the visible/active product surface
+    # during this window. False stops signal evaluation in the analytics
+    # engine entirely (no rows written to `signals`); the API no longer
+    # exposes a signals endpoint regardless of this flag.
+    enable_signals: bool = False
     # How often the regime/health engines recompute from breadth + trends.
     regime_refresh_interval_seconds: float = 60.0
     # indicator batch writer: flush whichever comes first
@@ -125,8 +131,6 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://localhost:8080"]
     )
-    # Max signal rows returned by GET /signals/{symbol}.
-    api_signals_limit: int = 50
     # Daemon supervisor restart/poll interval (seconds) for the looped runners.
     daemon_interval_seconds: float = 5.0
 

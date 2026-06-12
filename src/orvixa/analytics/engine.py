@@ -168,19 +168,20 @@ class AnalyticsEngine:
             )
         )
 
-        for signal in self._signal_engine.evaluate(symbol_id, snapshot, trend):
-            await self._signal_repo.insert(
-                SignalRow(
-                    symbol_id=symbol_id,
-                    ts=ts,
-                    type=signal.type,
-                    confidence=signal.confidence,
-                    components=signal.components,
-                    state_from=signal.state_from,
-                    state_to=signal.state_to,
+        if self._settings.enable_signals:
+            for signal in self._signal_engine.evaluate(symbol_id, snapshot, trend):
+                await self._signal_repo.insert(
+                    SignalRow(
+                        symbol_id=symbol_id,
+                        ts=ts,
+                        type=signal.type,
+                        confidence=signal.confidence,
+                        components=signal.components,
+                        state_from=signal.state_from,
+                        state_to=signal.state_to,
+                    )
                 )
-            )
-            self.signals_emitted += 1
+                self.signals_emitted += 1
 
         for event in self._event_engine.evaluate(symbol_id, snapshot):
             await self._event_repo.insert(

@@ -26,6 +26,7 @@ from .models import (
     SignalRow,
     SymbolRow,
     TelegramAlertRow,
+    TierChangeRow,
 )
 from .pool import DBPool
 
@@ -87,6 +88,40 @@ class SymbolRepository:
             rank,
             json.dumps(metrics),
             base,
+        )
+
+
+class TierChangeRepository:
+    """The ``tier_changes`` log — every tier/class transition from M3."""
+
+    def __init__(self, pool: DBPool) -> None:
+        self._pool = pool
+
+    async def insert(self, row: TierChangeRow) -> int:
+        result = await self._pool.fetchrow(
+            """
+            INSERT INTO tier_changes (symbol_id, ts, from_tier, to_tier, reason)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id
+            """,
+            row.symbol_id,
+            row.ts,
+            row.from_tier,
+            row.to_tier,
+            row.reason,
+        )
+        assert result is not None
+        return int(result["id"])
+
+    async def get_recent(self, symbol_id: int | None = None, limit: int = 50):
+        if symbol_id is None:
+            return await self._pool.fetch(
+                "SELECT * FROM tier_changes ORDER BY ts DESC LIMIT $1", limit
+            )
+        return await self._pool.fetch(
+            "SELECT * FROM tier_changes WHERE symbol_id = $1 ORDER BY ts DESC LIMIT $2",
+            symbol_id,
+            limit,
         )
 
 

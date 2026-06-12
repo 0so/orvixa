@@ -20,6 +20,7 @@ from .repository import (
     SignalRepository,
     SymbolRepository,
     TelegramAlertRepository,
+    TierChangeRepository,
 )
 
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "SignalRepository",
     "SymbolRepository",
     "TelegramAlertRepository",
+    "TierChangeRepository",
 ]

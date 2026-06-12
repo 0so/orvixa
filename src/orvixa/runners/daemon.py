@@ -71,8 +71,15 @@ def run_analytics_daemon() -> None:
         asyncio.run(supervise("analytics", analytics_run))
 
 
+def run_symbols_daemon() -> None:
+    from .symbols import run as symbols_run
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(supervise("symbols", symbols_run))
+
+
 def main() -> None:
-    """``python -m orvixa.runners.daemon {ingest|analytics}``."""
+    """``python -m orvixa.runners.daemon {ingest|analytics|symbols}``."""
     import sys
 
     choice = sys.argv[1] if len(sys.argv) > 1 else "analytics"
@@ -80,8 +87,12 @@ def main() -> None:
         run_ingest_daemon()
     elif choice == "analytics":
         run_analytics_daemon()
+    elif choice == "symbols":
+        run_symbols_daemon()
     else:
-        raise SystemExit(f"usage: python -m orvixa.runners.daemon {{ingest|analytics}} (got {choice!r})")
+        raise SystemExit(
+            f"usage: python -m orvixa.runners.daemon {{ingest|analytics|symbols}} (got {choice!r})"
+        )
 
 
 if __name__ == "__main__":

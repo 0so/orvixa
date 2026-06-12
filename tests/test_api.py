@@ -1,9 +1,11 @@
 """Phase 2 API tests — read-only endpoints over a fake pool (no database).
 
-Verifies the documented contract: `/symbols` lists the registry, `/signals`
-returns the per-symbol log (empty for a fresh `*_REAL` symbol), and
-`/regime` / `/policy` return `{}` when nothing has been computed/persisted.
-Auth (X-API-Key) and the unauthenticated `/health` probe are covered too.
+Verifies the documented contract: `/symbols` lists the registry, and
+`/regime` returns `{}` when nothing has been computed/persisted. Auth
+(X-API-Key) and the unauthenticated `/health` probe are covered too.
+
+30-day Market Intelligence evaluation (frozen 2026-06-12): `/signals` and
+`/policy` have been removed from the API surface.
 """
 
 from __future__ import annotations
@@ -54,15 +56,6 @@ def test_symbols_lists_registry(client):
     assert [r["base"] for r in res.json()] == ["BTC_REAL", "ETH_REAL"]
 
 
-def test_signals_empty_for_known_symbol(client):
-    c, pool = client
-    pool.fetchval_return = 1  # get_id(base) resolves
-    pool.fetch_routes["FROM signals"] = []
-    res = c.get("/signals/BTC_REAL", headers={"X-API-Key": "secret"})
-    assert res.status_code == 200
-    assert res.json() == {"symbol": "BTC_REAL", "signals": []}
-
-
 def test_regime_empty_object_when_none(client):
     c, pool = client
     pool.fetchval_return = 1
@@ -71,15 +64,8 @@ def test_regime_empty_object_when_none(client):
     assert res.json() == {"symbol": "BTC_REAL", "regime": {}}
 
 
-def test_policy_returns_empty_object(client):
-    c, pool = client
-    pool.fetchval_return = 1
-    res = c.get("/policy/BTC_REAL", headers={"X-API-Key": "secret"})
-    assert res.json() == {"symbol": "BTC_REAL", "policy": {}}
-
-
 def test_unknown_symbol_is_404(client):
     c, pool = client
     pool.fetchval_return = None  # get_id → None
-    res = c.get("/signals/NOPE", headers={"X-API-Key": "secret"})
+    res = c.get("/regime/NOPE", headers={"X-API-Key": "secret"})
     assert res.status_code == 404

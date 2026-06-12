@@ -4,8 +4,11 @@ Boots the configured feed (unchanged ``FEED=sim|binance`` switch from M1),
 starts :class:`~orvixa.symbols.manager.SymbolManager` (automatic discovery,
 tiering, ranking, breadth, promotion/demotion), and periodically logs the
 watchlist + breadth. Symbol metadata (tier/class/status/tags/rank/metrics) is
-persisted to the ``symbols`` table. ``feedcheck`` (M1) and ``ingest`` (M2)
-are unchanged.
+persisted to the ``symbols`` table, and every tier transition is persisted to
+``tier_changes`` (30-day Market Intelligence evaluation — tiering is the
+dominant component of the decision framework, see
+``30d-evaluation-framework.md``). ``feedcheck`` (M1) and ``ingest`` (M2) are
+unchanged.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ import contextlib
 import signal
 
 from ..config import get_settings
-from ..db import SymbolRepository, create_pool
+from ..db import SymbolRepository, TierChangeRepository, create_pool
 from ..factory import build_feed
 from ..logging import get_logger, setup_logging
 from ..symbols.manager import SymbolManager
@@ -40,8 +43,9 @@ async def run() -> None:
     pool = await create_pool(settings)
     try:
         symbol_repo = SymbolRepository(pool)
+        tier_change_repo = TierChangeRepository(pool)
         feed = build_feed(settings)
-        manager = SymbolManager(settings, symbol_repo, feed=feed)
+        manager = SymbolManager(settings, symbol_repo, feed=feed, tier_change_repo=tier_change_repo)
 
         stop_event = asyncio.Event()
 

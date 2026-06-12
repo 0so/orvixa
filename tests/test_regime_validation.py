@@ -43,6 +43,11 @@ def _settings(**overrides) -> Settings:
         "high_volatility_pct": 0.0001,
         "signal_min_confidence": 0,
         "regime_refresh_interval_seconds": 10_000.0,
+        # Offline replay/validation harness: independent of the live product's
+        # enable_signals gate (30-day Market Intelligence evaluation, frozen
+        # 2026-06-12) -- this harness exercises the signal-emission pipeline
+        # directly.
+        "enable_signals": True,
     }
     defaults.update(overrides)
     return Settings(**defaults)

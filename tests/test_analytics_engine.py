@@ -59,6 +59,10 @@ def _settings(**overrides) -> Settings:
         "high_volatility_pct": 0.0001,
         "signal_min_confidence": 0,
         "regime_refresh_interval_seconds": 10_000.0,
+        # Engine-level signal evaluation/persistence path is still covered by
+        # tests even though it's disabled by default during the 30-day
+        # Market Intelligence evaluation (Settings.enable_signals).
+        "enable_signals": True,
     }
     defaults.update(overrides)
     return Settings(**defaults)

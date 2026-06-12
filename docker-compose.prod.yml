@@ -78,7 +78,19 @@ services:
     command: python -m orvixa.runners.daemon analytics
     restart: unless-stopped
 
-  # Read-only FastAPI service exposing /symbols /signals /regime /policy.
+  # Persistent Symbol Manager daemon (M3 -- discovery/ranking/tiering/breadth,
+  # tier_changes log). Live deployment for the 30-day Market Intelligence
+  # evaluation: tiering is the dominant component of the decision framework
+  # (see 30d-evaluation-framework.md) and needs real runtime to accumulate.
+  symbols:
+    <<: *app
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: python -m orvixa.runners.daemon symbols
+    restart: unless-stopped
+
+  # Read-only FastAPI service exposing /symbols /regime.
   # Bound to localhost only; a reverse proxy (Caddy/Traefik/nginx) in front
   # of this host should terminate TLS and forward to 127.0.0.1:8000.
   api:
