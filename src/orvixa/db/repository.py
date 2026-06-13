@@ -24,6 +24,7 @@ from .models import (
     MarketMemoryRow,
     MarketReportRow,
     SignalRow,
+    SymbolMetricsSnapshotRow,
     SymbolRow,
     TelegramAlertRow,
     TierChangeRow,
@@ -120,6 +121,53 @@ class TierChangeRepository:
             )
         return await self._pool.fetch(
             "SELECT * FROM tier_changes WHERE symbol_id = $1 ORDER BY ts DESC LIMIT $2",
+            symbol_id,
+            limit,
+        )
+
+
+class SymbolMetricsSnapshotRepository:
+    """The ``symbol_metrics_snapshots`` log — raw 24h metrics per refresh cycle.
+
+    Append-only dataset for studying anomaly-vs-noise patterns ahead of an
+    adaptive promotion/demotion signal.
+    """
+
+    def __init__(self, pool: DBPool) -> None:
+        self._pool = pool
+
+    async def insert_batch(self, rows: Sequence[SymbolMetricsSnapshotRow]) -> int:
+        if not rows:
+            return 0
+        await self._pool.executemany(
+            """
+            INSERT INTO symbol_metrics_snapshots
+                (symbol_id, ts, tier, quote_volume_24h, price_change_pct_24h, trade_count_24h, last_price)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+            [
+                (
+                    r.symbol_id,
+                    r.ts,
+                    r.tier,
+                    r.quote_volume_24h,
+                    r.price_change_pct_24h,
+                    r.trade_count_24h,
+                    r.last_price,
+                )
+                for r in rows
+            ],
+        )
+        return len(rows)
+
+    async def get_recent(self, symbol_id: int, limit: int = 200):
+        return await self._pool.fetch(
+            """
+            SELECT * FROM symbol_metrics_snapshots
+            WHERE symbol_id = $1
+            ORDER BY ts DESC
+            LIMIT $2
+            """,
             symbol_id,
             limit,
         )

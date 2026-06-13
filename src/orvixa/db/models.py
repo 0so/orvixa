@@ -92,6 +92,25 @@ class TierChangeRow:
 
 
 @dataclass(slots=True)
+class SymbolMetricsSnapshotRow:
+    """One per-symbol, per-refresh-cycle snapshot of raw 24h market metrics.
+
+    Pure data collection for the M3 tiering refresh cycle — no thresholds or
+    classification applied. Building a dataset to study what separates real
+    anomalies from noise, ahead of designing an adaptive (e.g. EWMA z-score)
+    promotion signal.
+    """
+
+    symbol_id: int
+    ts: datetime
+    tier: int
+    quote_volume_24h: float
+    price_change_pct_24h: float
+    trade_count_24h: int
+    last_price: float
+
+
+@dataclass(slots=True)
 class SignalRow:
     symbol_id: int
     ts: datetime

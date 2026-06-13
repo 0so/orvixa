@@ -18,7 +18,7 @@ import contextlib
 import signal
 
 from ..config import get_settings
-from ..db import SymbolRepository, TierChangeRepository, create_pool
+from ..db import SymbolMetricsSnapshotRepository, SymbolRepository, TierChangeRepository, create_pool
 from ..factory import build_feed
 from ..logging import get_logger, setup_logging
 from ..symbols.manager import SymbolManager
@@ -44,8 +44,15 @@ async def run() -> None:
     try:
         symbol_repo = SymbolRepository(pool)
         tier_change_repo = TierChangeRepository(pool)
+        metrics_snapshot_repo = SymbolMetricsSnapshotRepository(pool)
         feed = build_feed(settings)
-        manager = SymbolManager(settings, symbol_repo, feed=feed, tier_change_repo=tier_change_repo)
+        manager = SymbolManager(
+            settings,
+            symbol_repo,
+            feed=feed,
+            tier_change_repo=tier_change_repo,
+            metrics_snapshot_repo=metrics_snapshot_repo,
+        )
 
         stop_event = asyncio.Event()
 

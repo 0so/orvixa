@@ -32,8 +32,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from ..config import Settings
-from ..db.models import SymbolRow, TierChangeRow
-from ..db.repository import SymbolRepository, TierChangeRepository
+from ..db.models import SymbolMetricsSnapshotRow, SymbolRow, TierChangeRow
+from ..db.repository import SymbolMetricsSnapshotRepository, SymbolRepository, TierChangeRepository
 from ..feeds.base import MarketFeed, TickerRow
 from ..feeds.normalize import normalize_symbol
 from .breadth import BreadthEngine
@@ -81,10 +81,12 @@ class SymbolManager:
         market_client: BinanceMarketClient | None = None,
         breadth_engine: BreadthEngine | None = None,
         tier_change_repo: TierChangeRepository | None = None,
+        metrics_snapshot_repo: SymbolMetricsSnapshotRepository | None = None,
     ) -> None:
         self._settings = settings
         self._symbol_repo = symbol_repo
         self._tier_change_repo = tier_change_repo
+        self._metrics_snapshot_repo = metrics_snapshot_repo
         self._feed = feed
         self._market_client = market_client or BinanceMarketClient(rest_base=settings.binance_rest_base)
         self._breadth = breadth_engine or BreadthEngine(trend_window=settings.breadth_trend_window)
@@ -215,6 +217,7 @@ class SymbolManager:
                 await self._persist(state)
 
             await self._persist_tier_changes(changes)
+            await self._persist_metrics_snapshots()
 
             self.refresh_count += 1
             self.last_tier_changes = changes
@@ -397,6 +400,29 @@ class SymbolManager:
                     reason=change.reason,
                 )
             )
+
+    async def _persist_metrics_snapshots(self) -> None:
+        """Record raw per-cycle 24h metrics for every symbol (anomaly-signal research)."""
+        if self._metrics_snapshot_repo is None:
+            return
+        ts = datetime.now(tz=UTC)
+        rows: list[SymbolMetricsSnapshotRow] = []
+        for state in self._states.values():
+            symbol_id = await self._symbol_repo.get_id(state.base)
+            if symbol_id is None:
+                continue
+            rows.append(
+                SymbolMetricsSnapshotRow(
+                    symbol_id=symbol_id,
+                    ts=ts,
+                    tier=state.tier,
+                    quote_volume_24h=state.quote_volume,
+                    price_change_pct_24h=state.price_change_pct,
+                    trade_count_24h=state.count,
+                    last_price=state.last_price,
+                )
+            )
+        await self._metrics_snapshot_repo.insert_batch(rows)
 
     # -- feed integration -------------------------------------------------------
     async def _sync_feed(self) -> None:
