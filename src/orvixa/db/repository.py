@@ -18,6 +18,7 @@ from datetime import datetime
 from typing import Any
 
 from .models import (
+    BreadthSnapshotRow,
     CandleRow,
     IndicatorRow,
     MarketEventRow,
@@ -170,6 +171,40 @@ class SymbolMetricsSnapshotRepository:
             """,
             symbol_id,
             limit,
+        )
+
+
+class BreadthSnapshotRepository:
+    """The ``breadth_snapshots`` log — one row per refresh cycle, whole-market.
+
+    Aggregate counterpart to :class:`SymbolMetricsSnapshotRepository`. Append-
+    only dataset for market-regime / mean-reversion research on breadth.
+    """
+
+    def __init__(self, pool: DBPool) -> None:
+        self._pool = pool
+
+    async def insert(self, row: BreadthSnapshotRow) -> None:
+        await self._pool.execute(
+            """
+            INSERT INTO breadth_snapshots
+                (ts, total, advancers, decliners, unchanged, ad_ratio, pct_above_trend, new_highs, new_lows)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            """,
+            row.ts,
+            row.total,
+            row.advancers,
+            row.decliners,
+            row.unchanged,
+            row.ad_ratio,
+            row.pct_above_trend,
+            row.new_highs,
+            row.new_lows,
+        )
+
+    async def get_recent(self, limit: int = 200):
+        return await self._pool.fetch(
+            "SELECT * FROM breadth_snapshots ORDER BY ts DESC LIMIT $1", limit
         )
 
 

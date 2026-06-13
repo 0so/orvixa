@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from .pool import DBPool, create_pool
 from .repository import (
+    BreadthSnapshotRepository,
     CandleRepository,
     IndicatorRepository,
     MarketEventRepository,
@@ -27,6 +28,7 @@ from .repository import (
 __all__ = [
     "DBPool",
     "create_pool",
+    "BreadthSnapshotRepository",
     "CandleRepository",
     "IndicatorRepository",
     "MarketEventRepository",

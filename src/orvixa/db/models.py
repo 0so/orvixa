@@ -111,6 +111,27 @@ class SymbolMetricsSnapshotRow:
 
 
 @dataclass(slots=True)
+class BreadthSnapshotRow:
+    """One per-cycle snapshot of whole-market breadth (from BreadthEngine).
+
+    Aggregate counterpart to :class:`SymbolMetricsSnapshotRow` — one row per
+    refresh cycle (not per symbol). Building the dataset to test market-regime
+    and mean-reversion hypotheses on breadth itself (advance/decline ratio,
+    % above trend, new highs/lows) ahead of any per-symbol signal.
+    """
+
+    ts: datetime
+    total: int
+    advancers: int
+    decliners: int
+    unchanged: int
+    ad_ratio: float
+    pct_above_trend: float
+    new_highs: int
+    new_lows: int
+
+
+@dataclass(slots=True)
 class SignalRow:
     symbol_id: int
     ts: datetime

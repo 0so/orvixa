@@ -32,8 +32,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from ..config import Settings
-from ..db.models import SymbolMetricsSnapshotRow, SymbolRow, TierChangeRow
-from ..db.repository import SymbolMetricsSnapshotRepository, SymbolRepository, TierChangeRepository
+from ..db.models import BreadthSnapshotRow, SymbolMetricsSnapshotRow, SymbolRow, TierChangeRow
+from ..db.repository import (
+    BreadthSnapshotRepository,
+    SymbolMetricsSnapshotRepository,
+    SymbolRepository,
+    TierChangeRepository,
+)
 from ..feeds.base import MarketFeed, TickerRow
 from ..feeds.normalize import normalize_symbol
 from .breadth import BreadthEngine
@@ -82,11 +87,13 @@ class SymbolManager:
         breadth_engine: BreadthEngine | None = None,
         tier_change_repo: TierChangeRepository | None = None,
         metrics_snapshot_repo: SymbolMetricsSnapshotRepository | None = None,
+        breadth_snapshot_repo: BreadthSnapshotRepository | None = None,
     ) -> None:
         self._settings = settings
         self._symbol_repo = symbol_repo
         self._tier_change_repo = tier_change_repo
         self._metrics_snapshot_repo = metrics_snapshot_repo
+        self._breadth_snapshot_repo = breadth_snapshot_repo
         self._feed = feed
         self._market_client = market_client or BinanceMarketClient(rest_base=settings.binance_rest_base)
         self._breadth = breadth_engine or BreadthEngine(trend_window=settings.breadth_trend_window)
@@ -218,6 +225,7 @@ class SymbolManager:
 
             await self._persist_tier_changes(changes)
             await self._persist_metrics_snapshots()
+            await self._persist_breadth_snapshot()
 
             self.refresh_count += 1
             self.last_tier_changes = changes
@@ -423,6 +431,25 @@ class SymbolManager:
                 )
             )
         await self._metrics_snapshot_repo.insert_batch(rows)
+
+    async def _persist_breadth_snapshot(self) -> None:
+        """Record one whole-market breadth snapshot per refresh cycle (anomaly-signal research)."""
+        if self._breadth_snapshot_repo is None or self._latest_breadth is None:
+            return
+        b = self._latest_breadth
+        await self._breadth_snapshot_repo.insert(
+            BreadthSnapshotRow(
+                ts=datetime.now(tz=UTC),
+                total=b.total,
+                advancers=b.advancers,
+                decliners=b.decliners,
+                unchanged=b.unchanged,
+                ad_ratio=b.ad_ratio,
+                pct_above_trend=b.pct_above_trend,
+                new_highs=b.new_highs,
+                new_lows=b.new_lows,
+            )
+        )
 
     # -- feed integration -------------------------------------------------------
     async def _sync_feed(self) -> None:

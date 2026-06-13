@@ -18,7 +18,13 @@ import contextlib
 import signal
 
 from ..config import get_settings
-from ..db import SymbolMetricsSnapshotRepository, SymbolRepository, TierChangeRepository, create_pool
+from ..db import (
+    BreadthSnapshotRepository,
+    SymbolMetricsSnapshotRepository,
+    SymbolRepository,
+    TierChangeRepository,
+    create_pool,
+)
 from ..factory import build_feed
 from ..logging import get_logger, setup_logging
 from ..symbols.manager import SymbolManager
@@ -45,6 +51,7 @@ async def run() -> None:
         symbol_repo = SymbolRepository(pool)
         tier_change_repo = TierChangeRepository(pool)
         metrics_snapshot_repo = SymbolMetricsSnapshotRepository(pool)
+        breadth_snapshot_repo = BreadthSnapshotRepository(pool)
         feed = build_feed(settings)
         manager = SymbolManager(
             settings,
@@ -52,6 +59,7 @@ async def run() -> None:
             feed=feed,
             tier_change_repo=tier_change_repo,
             metrics_snapshot_repo=metrics_snapshot_repo,
+            breadth_snapshot_repo=breadth_snapshot_repo,
         )
 
         stop_event = asyncio.Event()
