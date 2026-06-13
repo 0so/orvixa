@@ -129,6 +129,8 @@ class BreadthSnapshotRow:
     pct_above_trend: float
     new_highs: int
     new_lows: int
+    price_change_dispersion: float = 0.0
+    btc_dominance: float = 0.0
 
 
 @dataclass(slots=True)

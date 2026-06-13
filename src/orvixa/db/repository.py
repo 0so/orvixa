@@ -188,8 +188,8 @@ class BreadthSnapshotRepository:
         await self._pool.execute(
             """
             INSERT INTO breadth_snapshots
-                (ts, total, advancers, decliners, unchanged, ad_ratio, pct_above_trend, new_highs, new_lows)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                (ts, total, advancers, decliners, unchanged, ad_ratio, pct_above_trend, new_highs, new_lows, price_change_dispersion, btc_dominance)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             row.ts,
             row.total,
@@ -200,6 +200,8 @@ class BreadthSnapshotRepository:
             row.pct_above_trend,
             row.new_highs,
             row.new_lows,
+            row.price_change_dispersion,
+            row.btc_dominance,
         )
 
     async def get_recent(self, limit: int = 200):

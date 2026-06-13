@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import statistics
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -437,6 +438,18 @@ class SymbolManager:
         if self._breadth_snapshot_repo is None or self._latest_breadth is None:
             return
         b = self._latest_breadth
+
+        changes = [s.price_change_pct for s in self._states.values()]
+        dispersion = statistics.pstdev(changes) if len(changes) > 1 else 0.0
+
+        total_volume = sum(s.quote_volume for s in self._states.values())
+        btc_state = self._states.get("BTC")
+        btc_dominance = (
+            btc_state.quote_volume / total_volume
+            if btc_state is not None and total_volume > 0
+            else 0.0
+        )
+
         await self._breadth_snapshot_repo.insert(
             BreadthSnapshotRow(
                 ts=datetime.now(tz=UTC),
@@ -448,6 +461,8 @@ class SymbolManager:
                 pct_above_trend=b.pct_above_trend,
                 new_highs=b.new_highs,
                 new_lows=b.new_lows,
+                price_change_dispersion=dispersion,
+                btc_dominance=btc_dominance,
             )
         )
 
